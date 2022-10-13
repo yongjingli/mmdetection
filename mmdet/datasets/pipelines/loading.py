@@ -272,6 +272,11 @@ class LoadAnnotations:
         if gt_is_group_ofs is not None:
             results['gt_is_group_ofs'] = gt_is_group_ofs.copy()
 
+        # add keypoints
+        keypoints = ann_info.get('keypoints', None)
+        if keypoints is not None:
+            results['gt_keypoints'] = keypoints.copy()
+
         return results
 
     def _load_labels(self, results):

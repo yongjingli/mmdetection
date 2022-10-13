@@ -253,6 +253,13 @@ class Resize:
                 img_shape = results['img_shape']
                 bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, img_shape[1])
                 bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0])
+
+            if key in ['gt_bboxes']:
+                if "gt_keypoints" in results:
+                    keypoints = results['gt_keypoints']
+                    keypoints[:, :, 0:2] = keypoints[:, :, 0:2] * results['scale_factor'][:2]
+                    results['gt_keypoints'] = keypoints
+
             results[key] = bboxes
 
     def _resize_masks(self, results):
@@ -427,6 +434,25 @@ class RandomFlip:
             raise ValueError(f"Invalid flipping direction '{direction}'")
         return flipped
 
+    def keypoints_flip(self, keypoints, img_shape, direction):
+        assert keypoints.shape[-1] % 3 == 0
+        flipped = keypoints.copy()
+        if direction == 'horizontal':
+            w = img_shape[1]
+            flipped[..., 0::3] = w - keypoints[..., 0::3]
+        elif direction == 'vertical':
+            h = img_shape[0]
+            flipped[..., 1::3] = h - keypoints[..., 1::3]
+        elif direction == 'diagonal':
+            w = img_shape[1]
+            h = img_shape[0]
+            flipped[..., 0::3] = w - keypoints[..., 0::3]
+            flipped[..., 1::3] = h - keypoints[..., 1::3]
+        else:
+            raise ValueError(f"Invalid flipping direction '{direction}'")
+        return flipped
+
+
     def __call__(self, results):
         """Call function to flip bounding boxes, masks, semantic segmentation
         maps.
@@ -467,11 +493,19 @@ class RandomFlip:
             for key in results.get('img_fields', ['img']):
                 results[key] = mmcv.imflip(
                     results[key], direction=results['flip_direction'])
+
             # flip bboxes
             for key in results.get('bbox_fields', []):
                 results[key] = self.bbox_flip(results[key],
                                               results['img_shape'],
                                               results['flip_direction'])
+
+                if key in ['gt_bboxes']:
+                    if "gt_keypoints" in results:
+                        results["gt_keypoints"] = self.keypoints_flip(results["gt_keypoints"],
+                                                      results['img_shape'],
+                                                      results['flip_direction'])
+
             # flip masks
             for key in results.get('mask_fields', []):
                 results[key] = results[key].flip(results['flip_direction'])
@@ -1761,6 +1795,7 @@ class RandomCenterCropPad:
         img = results['img']
         h, w, c = img.shape
         boxes = results['gt_bboxes']
+
         while True:
             scale = random.choice(self.ratios)
             new_h = int(self.crop_size[0] * scale)
@@ -1810,6 +1845,15 @@ class RandomCenterCropPad:
                         if 'gt_masks' in results:
                             raise NotImplementedError(
                                 'RandomCenterCropPad only supports bbox.')
+
+                        if "gt_keypoints" in results:
+                            # print(mask)
+                            keypoints = results['gt_keypoints']
+                            keypoints = keypoints[mask, :, :]
+                            keypoints[:, :, 0::3] += cropped_center_x - left_w - x0
+                            keypoints[:, :, 1::3] += cropped_center_y - top_h - y0
+                            keypoints = keypoints[keep, :, :]
+                            results['gt_keypoints'] = keypoints
 
                 # crop semantic seg
                 for key in results.get('seg_fields', []):
