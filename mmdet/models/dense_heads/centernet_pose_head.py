@@ -220,8 +220,9 @@ class CenterNetPoseHead(BaseDenseHead, BBoxTestMixin):
             avg_factor=avg_factor * 2)
 
         # loss keypoints
+        avg_keypoints_factor = max(1, keypoints_center_heatmap_target.eq(1).sum())
         loss_keypoints_center_heatmap = self.loss_keypoints_center_heatmap(
-            keypoint_heatmap_pred, keypoints_center_heatmap_target, avg_factor=avg_factor)
+            keypoint_heatmap_pred, keypoints_center_heatmap_target, avg_factor=avg_keypoints_factor)
 
         loss_keypoints_wh = self.loss_keypoints_wh(
             keypoint_wh_pred,
@@ -233,7 +234,7 @@ class CenterNetPoseHead(BaseDenseHead, BBoxTestMixin):
             keypoint_offset_pred,
             keypoints_offset_target,
             keypoints_offset_target_weight,
-            avg_factor=avg_factor * 2)
+            avg_factor=avg_keypoints_factor * 2)
 
         return dict(
             loss_center_heatmap=loss_center_heatmap,
@@ -373,46 +374,46 @@ class CenterNetPoseHead(BaseDenseHead, BBoxTestMixin):
 
             for j, (ct, _gt_keypoint) in enumerate(zip(gt_centers, gt_keypoint)):
                 ctx_int, cty_int = ct.int()
+                if 0 <= ctx_int < feat_w and 0 <= cty_int < feat_h:
+                    ctx, cty = ct
+                    scale_box_h = (gt_bbox[j][3] - gt_bbox[j][1]) * height_ratio
+                    scale_box_w = (gt_bbox[j][2] - gt_bbox[j][0]) * width_ratio
+                    radius = gaussian_radius([scale_box_h, scale_box_w],
+                                             min_overlap=0.3)
+                    radius = max(0, int(radius))
+                    ind = gt_label[j]
+                    gen_gaussian_target(center_heatmap_target[batch_id, ind],
+                                        [ctx_int, cty_int], radius)
 
-                ctx, cty = ct
-                scale_box_h = (gt_bbox[j][3] - gt_bbox[j][1]) * height_ratio
-                scale_box_w = (gt_bbox[j][2] - gt_bbox[j][0]) * width_ratio
-                radius = gaussian_radius([scale_box_h, scale_box_w],
-                                         min_overlap=0.3)
-                radius = max(0, int(radius))
-                ind = gt_label[j]
-                gen_gaussian_target(center_heatmap_target[batch_id, ind],
-                                    [ctx_int, cty_int], radius)
+                    wh_target[batch_id, 0, cty_int, ctx_int] = scale_box_w
+                    wh_target[batch_id, 1, cty_int, ctx_int] = scale_box_h
 
-                wh_target[batch_id, 0, cty_int, ctx_int] = scale_box_w
-                wh_target[batch_id, 1, cty_int, ctx_int] = scale_box_h
+                    offset_target[batch_id, 0, cty_int, ctx_int] = ctx - ctx_int
+                    offset_target[batch_id, 1, cty_int, ctx_int] = cty - cty_int
 
-                offset_target[batch_id, 0, cty_int, ctx_int] = ctx - ctx_int
-                offset_target[batch_id, 1, cty_int, ctx_int] = cty - cty_int
+                    wh_offset_target_weight[batch_id, :, cty_int, ctx_int] = 1
 
-                wh_offset_target_weight[batch_id, :, cty_int, ctx_int] = 1
+                    for j, kps in enumerate(_gt_keypoint):
+                        kp_x, kp_y, kp_flag = kps
+                        if kp_flag > 0:
+                            kp_x = kp_x * width_ratio
+                            kp_y = kp_y * height_ratio
 
-                for j, kps in enumerate(_gt_keypoint):
-                    kp_x, kp_y, kp_flag = kps
-                    if kp_flag > 0:
-                        kp_x = kp_x * width_ratio
-                        kp_y = kp_y * height_ratio
+                            kp_x_int = int(kp_x)
+                            kp_y_int = int(kp_y)
 
-                        kp_x_int = int(kp_x)
-                        kp_y_int = int(kp_y)
+                            if 0 <= kp_x < feat_w and 0 <= kp_y < feat_h:
+                                gen_gaussian_target(keypoints_center_heatmap_target[batch_id, j],
+                                                    [kp_x_int, kp_y_int], radius)
 
-                        if 0 <= kp_x < feat_w and 0 <= kp_y < feat_h:
-                            gen_gaussian_target(keypoints_center_heatmap_target[batch_id, j],
-                                                [kp_x_int, kp_y_int], radius)
+                                keypoints_offset_target[batch_id, 0, kp_y_int, kp_x_int] = kp_x - kp_x_int
+                                keypoints_offset_target[batch_id, 1, kp_y_int, kp_x_int] = kp_y - kp_y_int
+                                keypoints_offset_target_weight[batch_id, :, kp_y_int, kp_x_int] = 1
 
-                            keypoints_offset_target[batch_id, 0, kp_y_int, kp_x_int] = kp_x - kp_x_int
-                            keypoints_offset_target[batch_id, 1, kp_y_int, kp_x_int] = kp_y - kp_y_int
-                            keypoints_offset_target_weight[batch_id, :, kp_y_int, kp_x_int] = 1
-
-                            keypoints_wh_target[batch_id, 2*j + 0, cty_int, ctx_int] = kp_x - ctx_int
-                            keypoints_wh_target[batch_id, 2*j + 1, cty_int, ctx_int] = kp_y - cty_int
-                            keypoints_wh_target_weight[batch_id, 2*j + 0, cty_int, ctx_int] = 1
-                            keypoints_wh_target_weight[batch_id, 2*j + 1, cty_int, ctx_int] = 1
+                                keypoints_wh_target[batch_id, 2*j + 0, cty_int, ctx_int] = kp_x - ctx_int
+                                keypoints_wh_target[batch_id, 2*j + 1, cty_int, ctx_int] = kp_y - cty_int
+                                keypoints_wh_target_weight[batch_id, 2*j + 0, cty_int, ctx_int] = 1
+                                keypoints_wh_target_weight[batch_id, 2*j + 1, cty_int, ctx_int] = 1
 
         avg_factor = max(1, center_heatmap_target.eq(1).sum())
         target_result = dict(
@@ -644,3 +645,295 @@ class CenterNetPoseHead(BaseDenseHead, BBoxTestMixin):
             proposal_list = self.get_bboxes(
                 *outs, img_metas=img_metas, cfg=proposal_cfg)
             return losses, proposal_list
+
+    def simple_test(self, feats, img_metas, rescale=False):
+        """Test function without test-time augmentation.
+
+        Args:
+            feats (tuple[torch.Tensor]): Multi-level features from the
+                upstream network, each is a 4D-tensor.
+            img_metas (list[dict]): List of image information.
+            rescale (bool, optional): Whether to rescale the results.
+                Defaults to False.
+
+        Returns:
+            list[tuple[Tensor, Tensor]]: Each item in result_list is 2-tuple.
+                The first item is ``bboxes`` with shape (n, 5),
+                where 5 represent (tl_x, tl_y, br_x, br_y, score).
+                The shape of the second tensor in the tuple is ``labels``
+                with shape (n, ).
+        """
+        return self.simple_test_bboxes(feats, img_metas, rescale=rescale)
+
+    def simple_test_bboxes(self, feats, img_metas, rescale=False):
+        """Test det bboxes without test-time augmentation, can be applied in
+        DenseHead except for ``RPNHead`` and its variants, e.g., ``GARPNHead``,
+        etc.
+
+        Args:
+            feats (tuple[torch.Tensor]): Multi-level features from the
+                upstream network, each is a 4D-tensor.
+            img_metas (list[dict]): List of image information.
+            rescale (bool, optional): Whether to rescale the results.
+                Defaults to False.
+
+        Returns:
+            list[tuple[Tensor, Tensor]]: Each item in result_list is 2-tuple.
+                The first item is ``bboxes`` with shape (n, 5),
+                where 5 represent (tl_x, tl_y, br_x, br_y, score).
+                The shape of the second tensor in the tuple is ``labels``
+                with shape (n,)
+        """
+        outs = self.forward(feats)
+        results_list = self.get_bboxes(
+            *outs, img_metas=img_metas, rescale=rescale)
+        return results_list
+
+    def simple_test_pose(self, feats, img_metas, rescale=False):
+        outs = self.forward(feats)
+        results_list = self.get_bboxes_pose(
+            *outs, img_metas=img_metas, rescale=rescale)
+        return results_list
+
+    def get_bboxes_pose(self,
+                   center_heatmap_preds,
+                   wh_preds,
+                   offset_preds,
+                   keypoint_heatmap_pred,
+                   keypoint_wh_pred,
+                   keypoint_offset_pred,
+                   img_metas,
+                   rescale=True,
+                   with_nms=False):
+        """Transform network output for a batch into bbox predictions.
+
+        Args:
+            center_heatmap_preds (list[Tensor]): Center predict heatmaps for
+                all levels with shape (B, num_classes, H, W).
+            wh_preds (list[Tensor]): WH predicts for all levels with
+                shape (B, 2, H, W).
+            offset_preds (list[Tensor]): Offset predicts for all levels
+                with shape (B, 2, H, W).
+            img_metas (list[dict]): Meta information of each image, e.g.,
+                image size, scaling factor, etc.
+            rescale (bool): If True, return boxes in original image space.
+                Default: True.
+            with_nms (bool): If True, do nms before return boxes.
+                Default: False.
+
+        Returns:
+            list[tuple[Tensor, Tensor]]: Each item in result_list is 2-tuple.
+                The first item is an (n, 5) tensor, where 5 represent
+                (tl_x, tl_y, br_x, br_y, score) and the score between 0 and 1.
+                The shape of the second tensor in the tuple is (n,), and
+                each element represents the class label of the corresponding
+                box.
+        """
+        assert len(center_heatmap_preds) == len(wh_preds) == len(
+            offset_preds) == 1
+        result_list = []
+        for img_id in range(len(img_metas)):
+            result_list.append(
+                self._get_bboxes_pose_single(
+                    center_heatmap_preds[0][img_id:img_id + 1, ...],
+                    wh_preds[0][img_id:img_id + 1, ...],
+                    offset_preds[0][img_id:img_id + 1, ...],
+                    keypoint_heatmap_pred[0][img_id:img_id + 1, ...],
+                    keypoint_wh_pred[0][img_id:img_id + 1, ...],
+                    keypoint_offset_pred[0][img_id:img_id + 1, ...],
+                    img_metas[img_id],
+                    rescale=rescale,
+                    with_nms=with_nms))
+        return result_list
+
+    def _get_bboxes_pose_single(self,
+                           center_heatmap_pred,
+                           wh_pred,
+                           offset_pred,
+                           keypoint_heatmap_pred,
+                           keypoint_wh_pred,
+                           keypoint_offset_pred,
+                           img_meta,
+                           rescale=False,
+                           with_nms=True):
+        """Transform outputs of a single image into bbox results.
+
+        Args:
+            center_heatmap_pred (Tensor): Center heatmap for current level with
+                shape (1, num_classes, H, W).
+            wh_pred (Tensor): WH heatmap for current level with shape
+                (1, num_classes, H, W).
+            offset_pred (Tensor): Offset for current level with shape
+                (1, corner_offset_channels, H, W).
+            img_meta (dict): Meta information of current image, e.g.,
+                image size, scaling factor, etc.
+            rescale (bool): If True, return boxes in original image space.
+                Default: False.
+            with_nms (bool): If True, do nms before return boxes.
+                Default: True.
+
+        Returns:
+            tuple[Tensor, Tensor]: The first item is an (n, 5) tensor, where
+                5 represent (tl_x, tl_y, br_x, br_y, score) and the score
+                between 0 and 1. The shape of the second tensor in the tuple
+                is (n,), and each element represents the class label of the
+                corresponding box.
+        """
+        batch_det_bboxes, batch_labels, batch_keypoint_wh = self.decode_heatmap_pose(
+            center_heatmap_pred,
+            wh_pred,
+            offset_pred,
+            keypoint_heatmap_pred,
+            keypoint_wh_pred,
+            keypoint_offset_pred,
+            img_meta['batch_input_shape'],
+            k=self.test_cfg.topk,
+            kernel=self.test_cfg.local_maximum_kernel)
+
+        det_bboxes = batch_det_bboxes.view([-1, 5])
+        det_labels = batch_labels.view(-1)
+
+        keypoint_wh = batch_keypoint_wh.view([-1, 34])
+
+        batch_border = det_bboxes.new_tensor(img_meta['border'])[...,
+                                                                 [2, 0, 2, 0]]
+        det_bboxes[..., :4] -= batch_border
+        keypoint_wh[:, 0::2] = keypoint_wh[:, 0::2] - batch_border[0]
+        keypoint_wh[:, 1::2] = keypoint_wh[:, 1::2] - batch_border[1]
+
+        if rescale:
+            det_bboxes[..., :4] /= det_bboxes.new_tensor(
+                img_meta['scale_factor'])
+            keypoint_wh[:, 0::2] /= keypoint_wh.new_tensor(
+                img_meta['scale_factor'])[0]
+            keypoint_wh[:, 1::2] /= keypoint_wh.new_tensor(
+                img_meta['scale_factor'])[1]
+
+        # if with_nms:
+        #     det_bboxes, det_labels = self._bboxes_nms(det_bboxes, det_labels,
+        #                                               self.test_cfg)
+        return det_bboxes, det_labels, keypoint_wh
+
+    def decode_heatmap_pose(self,
+                       center_heatmap_pred,
+                       wh_pred,
+                       offset_pred,
+                       keypoint_heatmap_pred,
+                       keypoint_wh_pred,
+                       keypoint_offset_pred,
+                       img_shape,
+                       k=100,
+                       kernel=3):
+        """Transform outputs into detections raw bbox prediction.
+
+        Args:
+            center_heatmap_pred (Tensor): center predict heatmap,
+               shape (B, num_classes, H, W).
+            wh_pred (Tensor): wh predict, shape (B, 2, H, W).
+            offset_pred (Tensor): offset predict, shape (B, 2, H, W).
+            img_shape (list[int]): image shape in [h, w] format.
+            k (int): Get top k center keypoints from heatmap. Default 100.
+            kernel (int): Max pooling kernel for extract local maximum pixels.
+               Default 3.
+
+        Returns:
+            tuple[torch.Tensor]: Decoded output of CenterNetHead, containing
+               the following Tensors:
+
+              - batch_bboxes (Tensor): Coords of each box with shape (B, k, 5)
+              - batch_topk_labels (Tensor): Categories of each box with \
+                  shape (B, k)
+        """
+        height, width = center_heatmap_pred.shape[2:]
+        inp_h, inp_w = img_shape
+
+        center_heatmap_pred = get_local_maximum(
+            center_heatmap_pred, kernel=kernel)
+
+        *batch_dets, topk_ys, topk_xs = get_topk_from_heatmap(
+            center_heatmap_pred, k=k)
+        batch_scores, batch_index, batch_topk_labels = batch_dets
+
+        # keypoints
+        keypoint_wh = transpose_and_gather_feat(keypoint_wh_pred, batch_index)
+        keypoint_wh[:, :, 0::2] = keypoint_wh[:, :, 0::2] + topk_xs[:, :, None]
+        keypoint_wh[:, :, 1::2] = keypoint_wh[:, :, 1::2] + topk_ys[:, :, None]
+        keypoint_wh[:, :, 0::2] = keypoint_wh[:, :, 0::2] * (inp_w / width)
+        keypoint_wh[:, :, 1::2] = keypoint_wh[:, :, 1::2] * (inp_h / height)
+        batch_keypoint_wh = keypoint_wh
+
+        # boxes
+        wh = transpose_and_gather_feat(wh_pred, batch_index)
+        offset = transpose_and_gather_feat(offset_pred, batch_index)
+
+        topk_xs = topk_xs + offset[..., 0]
+        topk_ys = topk_ys + offset[..., 1]
+        tl_x = (topk_xs - wh[..., 0] / 2) * (inp_w / width)
+        tl_y = (topk_ys - wh[..., 1] / 2) * (inp_h / height)
+        br_x = (topk_xs + wh[..., 0] / 2) * (inp_w / width)
+        br_y = (topk_ys + wh[..., 1] / 2) * (inp_h / height)
+
+        batch_bboxes = torch.stack([tl_x, tl_y, br_x, br_y], dim=2)
+        batch_bboxes = torch.cat((batch_bboxes, batch_scores[..., None]),
+                                 dim=-1)
+
+        # keypoints finetune
+        if 1:
+            keypoint_heatmap_pred = get_local_maximum(
+                keypoint_heatmap_pred, kernel=kernel)
+            batch, cat, height, width = keypoint_heatmap_pred.size()
+
+            thresh = 0.1
+            num_joints = cat
+            batch_keypoint_wh = batch_keypoint_wh
+            batch_keypoint_wh = batch_keypoint_wh.view(batch, k, num_joints, 2).permute(
+                0, 2, 1, 3).contiguous()  # b x J x K x 2
+            reg_kps = batch_keypoint_wh.unsqueeze(3).expand(batch, num_joints, k, k, 2)
+            hm_score, hm_inds, hm_ys, hm_xs = self._topk_channel(keypoint_heatmap_pred, K=k)
+            hp_offset = transpose_and_gather_feat(keypoint_offset_pred, hm_inds.view(batch, -1))
+            hp_offset = hp_offset.view(batch, num_joints, k, 2)
+            hm_xs = (hm_xs + hp_offset[:, :, :, 0]) * (inp_w / width)
+            hm_ys = (hm_ys + hp_offset[:, :, :, 1]) * (inp_h / height)
+
+            mask = (hm_score > thresh).float()
+            hm_score = (1 - mask) * -1 + mask * hm_score
+            hm_ys = (1 - mask) * (-10000) + mask * hm_ys
+            hm_xs = (1 - mask) * (-10000) + mask * hm_xs
+            hm_kps = torch.stack([hm_xs, hm_ys], dim=-1).unsqueeze(
+                2).expand(batch, num_joints, k, k, 2)
+
+            dist = (((reg_kps - hm_kps) ** 2).sum(dim=4) ** 0.5)
+            min_dist, min_ind = dist.min(dim=3)  # b x J x K
+            hm_score = hm_score.gather(2, min_ind).unsqueeze(-1)  # b x J x K x 1
+            min_dist = min_dist.unsqueeze(-1)
+            min_ind = min_ind.view(batch, num_joints, k, 1, 1).expand(
+                batch, num_joints, k, 1, 2)
+            hm_kps = hm_kps.gather(3, min_ind)
+            hm_kps = hm_kps.view(batch, num_joints, k, 2)
+
+            l = batch_bboxes[:, :, 0].view(batch, 1, k, 1).expand(batch, num_joints, k, 1)
+            t = batch_bboxes[:, :, 1].view(batch, 1, k, 1).expand(batch, num_joints, k, 1)
+            r = batch_bboxes[:, :, 2].view(batch, 1, k, 1).expand(batch, num_joints, k, 1)
+            b = batch_bboxes[:, :, 3].view(batch, 1, k, 1).expand(batch, num_joints, k, 1)
+            mask = (hm_kps[..., 0:1] < l) + (hm_kps[..., 0:1] > r) + \
+                   (hm_kps[..., 1:2] < t) + (hm_kps[..., 1:2] > b) + \
+                   (hm_score < thresh) + (min_dist > (torch.max(b - t, r - l) * 0.3))
+            mask = (mask > 0).float().expand(batch, num_joints, k, 2)
+            kps = (1 - mask) * hm_kps + mask * batch_keypoint_wh
+            kps = kps.permute(0, 2, 1, 3).contiguous().view(
+                batch, k, num_joints * 2)
+
+            batch_keypoint_wh = kps
+
+        return batch_bboxes, batch_topk_labels, batch_keypoint_wh
+
+    def _topk_channel(self, scores, K=40):
+        batch, cat, height, width = scores.size()
+
+        topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
+
+        topk_inds = topk_inds % (height * width)
+        topk_ys = (topk_inds.to(dtype=torch.float32) / width).int().float()
+        topk_xs = (topk_inds % width).int().float()
+
+        return topk_scores, topk_inds, topk_ys, topk_xs

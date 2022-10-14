@@ -26,7 +26,6 @@ def example_det_infer():
     config_file = '../checkpoints/centernet_resnet18_dcnv2_140e_coco.py'
     checkpoint_file = '../checkpoints/centernet_resnet18_dcnv2_140e_coco_20210702_155131-c8cd631f.pth'
 
-
     # local train centernet
     # config_file = "/userdata/liyj/programs/mmdetection/work_dirs/centernet_resnet18_dcnv2_140e_coco/centernet_resnet18_dcnv2_140e_coco.py"
     # checkpoint_file = "/userdata/liyj/programs/mmdetection/work_dirs/centernet_resnet18_dcnv2_140e_coco/epoch_13.pth"
