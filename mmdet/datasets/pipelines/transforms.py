@@ -452,6 +452,16 @@ class RandomFlip:
             raise ValueError(f"Invalid flipping direction '{direction}'")
         return flipped
 
+    def orient_flip(self, orients, img_shape, direction):
+        # 对于朝向的flip，目前只是考虑了horizontal的情况
+        assert direction == "horizontal", "orient_flip, direction == horizontal"
+
+        flipped = orients.copy()
+        # 将原来为-1的朝向，flip后重新设置为-1
+        mask = flipped < 0
+        flipped = (360 - flipped) % 360
+        flipped[mask] = -1
+        return flipped
 
     def __call__(self, results):
         """Call function to flip bounding boxes, masks, semantic segmentation
@@ -503,6 +513,10 @@ class RandomFlip:
                 if key in ['gt_bboxes']:
                     if "gt_keypoints" in results:
                         results["gt_keypoints"] = self.keypoints_flip(results["gt_keypoints"],
+                                                      results['img_shape'],
+                                                      results['flip_direction'])
+                    if "gt_orients" in results:
+                        results["gt_orients"] = self.orient_flip(results["gt_orients"],
                                                       results['img_shape'],
                                                       results['flip_direction'])
 
@@ -1854,6 +1868,19 @@ class RandomCenterCropPad:
                             keypoints[:, :, 1::3] += cropped_center_y - top_h - y0
                             keypoints = keypoints[keep, :, :]
                             results['gt_keypoints'] = keypoints
+
+                        if "gt_orients" in results:
+                            gt_orients = results['gt_orients']
+                            gt_orients_mask = results['gt_orients_mask']
+
+                            gt_orients = gt_orients[mask]
+                            gt_orients_mask = gt_orients_mask[mask]
+
+                            gt_orients = gt_orients[keep]
+                            gt_orients_mask = gt_orients_mask[keep]
+
+                            results['gt_orients'] = gt_orients
+                            results['gt_orients_mask'] = gt_orients_mask
 
                 # crop semantic seg
                 for key in results.get('seg_fields', []):

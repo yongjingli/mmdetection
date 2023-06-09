@@ -277,6 +277,15 @@ class LoadAnnotations:
         if keypoints is not None:
             results['gt_keypoints'] = keypoints.copy()
 
+        # add orients
+        gt_orients = ann_info.get('gt_orients', None)
+        if gt_orients is not None:
+            results['gt_orients'] = gt_orients.copy()
+
+        gt_orients_mask = ann_info.get('gt_orients_mask', None)
+        if gt_orients_mask is not None:
+            results['gt_orients_mask'] = gt_orients_mask.copy()
+
         return results
 
     def _load_labels(self, results):

@@ -15,6 +15,7 @@ from types import MethodType
 from mmdet.apis import inference_detector, show_result_pyplot, inference_detector_pose
 import matplotlib.pyplot as plt
 
+
 def example_det_infer():
     # download config and checkpoints
     # mim download mmdet - -config centernet_resnet18_dcnv2_140e_coco - -dest.

@@ -230,7 +230,9 @@ class DefaultFormatBundle:
             results['img'] = DC(
                 to_tensor(img), padding_value=self.pad_val['img'], stack=True)
         # for key in ['proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels']:
-        for key in ['proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels', 'gt_keypoints']:
+        # for key in ['proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels', 'gt_keypoints']:
+        for key in ['proposals', 'gt_bboxes', 'gt_bboxes_ignore',
+                    'gt_labels', 'gt_keypoints', "gt_orients", "gt_orients_mask"]:
             if key not in results:
                 continue
             results[key] = DC(to_tensor(results[key]))

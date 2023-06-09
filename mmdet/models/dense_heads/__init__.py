@@ -43,6 +43,7 @@ from .yolof_head import YOLOFHead
 from .yolox_head import YOLOXHead
 
 from .centernet_pose_head import CenterNetPoseHead
+from .centernet_pose_orient_head import CenterNetPoseOrientHead
 
 __all__ = [
     'AnchorFreeHead', 'AnchorHead', 'GuidedAnchorHead', 'FeatureAdaption',
@@ -56,5 +57,5 @@ __all__ = [
     'DETRHead', 'YOLOFHead', 'DeformableDETRHead', 'SOLOHead',
     'DecoupledSOLOHead', 'CenterNetHead', 'YOLOXHead',
     'DecoupledSOLOLightHead', 'LADHead', 'TOODHead', 'MaskFormerHead',
-    'Mask2FormerHead', 'SOLOV2Head', 'DDODHead', 'CenterNetPoseHead'
+    'Mask2FormerHead', 'SOLOV2Head', 'DDODHead', 'CenterNetPoseHead', "CenterNetPoseOrientHead"
 ]

@@ -36,5 +36,20 @@ if orientation >= 0:
     orients[k][1] = math.cos(orientation)
     orients_mask[k] = 1
 
+# if flipped:
+#     # degree = (72 - degree) % 72
+#     orientation = (360 - orientation) % 360
+# if orient > 180:
+#     orient = orient - 360
+#
+# orient = -orient
+# orient = orient - 90
+# if orient > 180:
+#     orient = orient - 360
+# if orient < -180:
+#     orient = orient + 360
+#
+# orient = orient / 180 * math.pi
+
 
 
